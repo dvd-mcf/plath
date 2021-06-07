@@ -1,0 +1,387 @@
+import org.openkinect.processing.*;
+
+Kinect2 kinect2;
+
+// Create an image for both the webcam and the previous webcam frame
+
+PImage originalFrame;
+
+PImage cameraFrame;
+
+PImage lastFrame;
+// How far from the right margin is the dedication?
+int dedicationOffset = 20;
+
+float totalSaturation;
+float totalMotion;
+float xoff = 0.1;
+
+int endWidth = 1080;
+int endHeight = 1000;
+
+  float heightRatio; 
+  float widthRatio;
+
+int motionMultiplier = 1;
+
+//Declare fonts
+PFont poemFont;
+PFont titleFont;
+PFont dedicationFont;
+PFont chineseFont;
+
+  int skip = 5;
+
+//The poem
+String Librarian = "/n /n /n if you were lunging for the future, it’s OK if you trip, /n /n The librarian was snorkelling in 800, pondering Africa /n when the husky-wolfhound-girl bust in the doors, /n armour freshly beaten, incisors capped with silver, /n carrying a question within her left hind tibia. /n The book has already lived through its troubles. /n The librarian licks the air and inhales /n foaming cordite, her bubbling lava-tide /n brimming. He saunters behind a steam-engine, keeps an eye. /n I sing louder than my own pain. /n They move like opposing magnets. She lightly mauls /n a book, but that query in her tibia’s still there /n so he shakes out his wings, performs a lazy tour en l’air, /n out of sheer contempt, she burps up a dragonfly, /n 你的饱腹感 /n 有时是因为对逃逸的满足 /n 有时是因为灯光的填充 /n he karate-chops a watermelon and he can tell from her paws /n that she’s a little bit impressed and she deigns /n to drop the gnawed pieces of a post-it, title and author. /n The story canters towards them and flops on the counter. /n 拉起两条人命 /n They stand looking at it. Aversion blooms. Very slowly /n he slides the book behind the velvet drapery, /n very gently, eases onto the counter a new story, /n shaped like a plum tree covered in snow. /n Light will fill my mouth soon. /n She stoops to sniff and volcanic peaks rise in the shadows, /n she looks to the high pass over the mountain. /n an envelope to slip me in gently /n Syncope, a moment of disruption – let us fall into this temporary dispossession /n return to see the real world look strange. /n Japanese Literature, 895.6, just there, left of the window /n says the librarian and bends to clear up the watermelon. /n  /n Yet in this great palace there is one heart /n that beats time with yours, comprehends your art. /n Give me your small hand in its cobweb glove... /n /n /n /n ";
+// String Bear = "We're going on a bear hunt/n We're going to catch a big one/n What a beautiful day! We're not scared/n  Uh-oh! Grass/n Long wavy grass/n  We can't go over it/n We can't go under it/n Oh no! We've got to go through it!/n  Swishy swashy! Swishy swashy! Swishy swashy!/n  We're going on a bear hunt/n We're going to catch a big one/n What a beautiful day! We're not scared/n  Uh-oh! A river! A deep, cold river/n  We can't go over it/n We can't go under it/n Oh no! We've got to go through it!/n  Splash splosh! Splash splosh! Splash splosh! /n We're going on a bear hunt/n We're going to catch a big one/n What a beautiful day! We're not scared/n  Uh-oh! Mud!";
+
+//How many empty lines at the start?
+int breaks = 3;
+
+//Split the poem
+String[] lines = split(Librarian, "/n");
+
+ArrayList<Float> motionHistory;
+
+ArrayList<Integer> oldSaturations;
+ArrayList<poemLine> poemLines;
+
+int historySize = 2;
+int totalRows;
+int frameLength = 0;
+
+Boolean frameRateToggle = false;
+
+
+void setup() {
+  fullScreen(  2);
+  kinect2 = new Kinect2(this);
+  kinect2.initVideo();
+  kinect2.initDevice();
+  cameraFrame = new PImage(endWidth, endHeight);
+  lastFrame = new PImage(endWidth, endHeight);
+
+  titleFont = loadFont("CalendasPlus-Bold-40.vlw");
+  dedicationFont = loadFont("Bould-ExtraLightItalic-40.vlw");
+  poemFont = loadFont("Argesta.vlw");
+  chineseFont = createFont("Simsum", 30);
+
+
+  motionHistory = new ArrayList<Float>();
+  oldSaturations = new ArrayList<Integer>();
+  poemLines = new ArrayList<poemLine>();
+  
+totalRows = lines.length;
+  for (int i = 0; i < totalRows; i++) {
+    poemLines.add(new poemLine(i));
+  }
+  
+  originalFrame = kinect2.getVideoImage();
+  
+  
+  
+
+  
+} 
+
+void draw() {
+  
+  heightRatio = height/float(endHeight);
+   widthRatio = width/float(endWidth);
+      
+  background(255);
+
+  float totalSaturation = 0;
+
+  //Initialise Camera
+  originalFrame.loadPixels();
+  cameraFrame.loadPixels();
+  lastFrame.loadPixels();
+  
+   lastFrame.copy(originalFrame, 0, 0, originalFrame.width, originalFrame.height, 0, 0, endWidth, endHeight);
+
+
+   originalFrame = kinect2.getVideoImage();
+
+ cameraFrame.copy(originalFrame, 0, 0, originalFrame.width, originalFrame.height, 0, 0, endWidth, endHeight);
+
+    
+    frameLength = cameraFrame.pixels.length;
+
+
+  for (int row = 0; row < totalRows; row += 1) {
+    
+    int start = (cameraFrame.width  / totalRows) * row;
+    int end = (cameraFrame.width / totalRows) * (row + 1);
+
+    //The running count of average brightness for the row
+    float totalRowXPosition = 0;
+    float avgRowXPosition = width/2;
+
+    //The count of pixels tracked in the row
+    int count = 0;
+
+    //The average motion ???
+    float avgRowMotion = 0;
+    //The total motion ???
+    float totalRowMotion = 0;
+    //Iterate through pixels in this row
+    if (lastFrame.pixels.length > 0) {
+    for (int y = 0; y < cameraFrame.height; y += skip) {
+      for (int x = start; x < end; x += skip) {
+
+        //Index of the pixels
+        int index = x + y * cameraFrame.width;
+
+        //Brightness of pixels
+        int b = int(brightness (cameraFrame.pixels[index]));
+        //Brightness from previous frame
+        int oldB = int(brightness (lastFrame.pixels[index]));
+
+        //Difference between frames
+        float d = b - oldB;
+        //If the difference between the old and new frames is greater than X, draw it, add to average X
+        if (d > 8) {
+          stroke (0, 0, 140, d / 40) ;
+          strokeWeight(map(d, 8, 100, 0, 25)) ;
+         point (width-((y * widthRatio) + random(80) - 40), (x * heightRatio) + random(80) - 40);
+          totalRowXPosition += y ;
+          totalRowMotion += d ;
+          count++ ;
+          
+          
+        }
+        updatePixels();
+      }
+    }
+  }
+
+    // Calculate average motion for the row
+    avgRowMotion = (abs(totalRowMotion)  * motionMultiplier / 18000  );
+
+    if (count > 0) {
+      avgRowXPosition = (width - totalRowXPosition  / count);
+    }
+ 
+    poemLine p = poemLines.get(row);
+    p.Change(avgRowXPosition, avgRowMotion);
+
+
+  }
+  
+  int margin = 40;
+   translate(0, margin);
+  // Set the left and top margin
+  
+
+
+  if (motionHistory.size() > 1) {
+    totalMotion = lerp(totalMotion, abs(motionHistory.get(0) - motionHistory.get(motionHistory.size()-1))*18000, 0.5);
+  }
+
+  motionHistory.add(totalSaturation);
+
+  if (this.motionHistory.size() > historySize) {
+    this.motionHistory.remove(0);
+  }
+  
+  
+  textAlign(LEFT);  
+
+
+  for (poemLine w : poemLines) {
+    w.update();
+    w.display();
+  }
+  textAlign(CENTER);
+
+  fill(0);
+  textFont(titleFont);
+  textSize(40);
+  String title = "The Head Librarian Conducts A Reference Interview";
+  text(title, width/2, 30);
+  fill (255, 0, 0 );
+  if (frameRateToggle == true) { 
+  text(frameRate, width/2, 80);
+  }
+  strokeWeight(2);
+  stroke (70);
+
+  line(width/2 - textWidth(title)/2, 40, width/2 + textWidth(title)/2, 40);
+  
+
+
+  fill(100);
+    strokeWeight(1);
+
+    line(0, height - 210, width, height-210);
+
+  
+  textFont(dedicationFont);
+  textSize(23);
+  textAlign(LEFT);
+  text ("Commissioned for the Future Libraries Festival and Manchester Poetry Library", dedicationOffset, height - 180);
+  text ("Technology by David McFarlane", dedicationOffset, height - 150);
+  text ("Poetry by Charlotte Wetton", dedicationOffset, height - 120);
+  text ("with Naomi Shihab Nye, Jennifer Lee Tsai, Roma Havers, Andrew Oldham, Yu Yoyo", dedicationOffset, height - 90);
+  text ("& translated by Dave Haysom, Maria Pawlikowska-Jasnorzewska, Barbara Bogoczek and Tony Howard", dedicationOffset, height - 60);
+
+//  textFont(poemFont);
+  
+}
+
+
+
+
+
+
+
+class poemLine {
+
+  PVector avgX ;
+  int line;
+  float magnitude;
+  PVector CVelocity;
+  PVector oldCVelocity;
+
+  PVector CLocation;
+  PVector oldCLocation; 
+
+  PVector CAccel;
+
+
+  PVector XDisp;
+
+  PVector velocity;
+  PVector acceleration;
+  PVector runningAcceleration;
+
+  PVector oldAcceleration;
+
+
+  PVector location;
+  PVector target;
+  String[] words ;
+
+  poemLine(Integer index) {
+
+    CLocation = new PVector (0, 0);
+    oldCLocation = new PVector (0, 0);
+    CVelocity = new PVector (0, 0);
+    oldCVelocity = new PVector (0, 0);
+
+    velocity = new PVector (0, 0);
+    acceleration = new PVector (0, 0);
+    oldAcceleration = new PVector (0, 0);
+    runningAcceleration = new PVector (0, 0);
+
+
+    location = new PVector( width / 2, (height/lines.length) * index);
+    words = split(lines[index], " ");
+    line = index;
+    target = new PVector (width/2, (height/lines.length) * index);
+    avgX = location;
+    magnitude = 1;
+  }
+
+
+  void Change(float newXDisp, float newMagnitude) {
+
+    if (newMagnitude < 0.2) {
+      newMagnitude = 0;
+    }
+
+    magnitude = lerp (newMagnitude, magnitude, 0.2);
+
+
+    CVelocity.lerp(oldCVelocity, 0.1);
+
+    CLocation = new PVector (newXDisp, 0);
+    //Calculate the speed of the centroid by comparing it with the previous frame
+    CVelocity = oldCLocation.sub(CLocation);
+    //Don't let it get bigger than 100
+
+    CVelocity.mult(magnitude);
+    CVelocity.limit(300);
+    //Calculate the acceleration of the centroid by comparing it with the previous frame
+    if (acceleration.x < 5) {
+      acceleration.x = 0;
+    }
+    acceleration =  oldCVelocity.sub(CVelocity);
+
+    runningAcceleration = runningAcceleration.lerp(acceleration, 0.15);
+
+
+    oldCVelocity = CVelocity;
+    oldCLocation = CLocation;
+    oldAcceleration = acceleration;
+  }
+
+
+
+  void update() {
+    velocity.add(runningAcceleration);
+    location.add(velocity);
+    if (location.x < 30) {
+      location.x = width + 30;
+    }
+  }
+
+  void display() {
+
+    int wordsLength = words.length;
+    int avgMotion = int(abs(totalMotion)  / frameLength / totalRows);
+
+    float lineWidth =  0;
+    float wordWidth = 0;
+    int textSize = 20;
+    textSize(textSize);
+
+    if (wordsLength > 0) {
+      noStroke();
+      fill(0, 255, 0);
+      float r = avgMotion * 3;
+      fill(0, 0, 255);
+
+      for (int x = 0; x < words.length; x += 1) {
+        String word = words[x];
+        wordWidth = textWidth(word);
+      }
+
+        textFont(poemFont);
+
+      for (int x = 0; x < words.length; x += 1) {
+
+        String word = words[x];
+        fill(0, 0, 0);
+        textSize(25);
+        if ((line == 0 + breaks) || (line == 6 + breaks) || (line ==10 + breaks ) || (line == 15 + breaks ) || (line ==16 + breaks ) || (line ==17  + breaks) || (line ==22 + breaks ) || (line ==27 + breaks )|| (line ==30 + breaks ) ||(line ==31 + breaks )||(line ==32 + breaks )||(line ==36 + breaks )||(line ==37  + breaks) ||(line ==38  + breaks )) {
+          fill(100);
+ if ((line == 15 + breaks ) || (line ==16 + breaks ) || (line ==17  + breaks) || (line ==22 + breaks )) {
+textFont(chineseFont);
+ }
+          textSize(textSize );
+        }
+
+        wordWidth = textWidth(word);
+        text(word, (location.x + lineWidth + noise(x + xoff)) % (width - 80), location.y, 0);
+        lineWidth += (wordWidth + 15);
+      }
+    }
+  }
+}
+
+String[] linebreak(String poem1) {
+  String[] poemArray;
+  poemArray = split(poem1, "/n");
+  return poemArray;
+};
+
+
+
+void keyPressed() {
+ if (key == 'r') {
+    frameRateToggle =! frameRateToggle;
+  }
+}
